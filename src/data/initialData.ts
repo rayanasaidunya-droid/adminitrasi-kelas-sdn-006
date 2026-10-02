@@ -1815,7 +1815,7 @@ export const INITIAL_TUJUAN_PEMBELAJARAN: TujuanPembelajaran[] = [
   }
 ];
 
-// Helper to generate realistic initial grades (Standar: nilai anak di setiap TP adalah 0)
+// Helper to generate realistic initial grades (Standar: nilai anak di setiap TP adalah 0 per semester)
 export const generateInitialGrades = (): GradeRecord[] => {
   const grades: GradeRecord[] = [];
 
@@ -1830,15 +1830,18 @@ export const generateInitialGrades = (): GradeRecord[] => {
         'Sumatif_SAS'
       ];
 
-      types.forEach((type) => {
-        grades.push({
-          id: `grd-sem1-${student.id}-${subject.id}-${type}`,
-          siswaId: student.id,
-          mapelId: subject.id,
-          jenis: type,
-          nilai: 0,
-          semester: '1 (Ganjil)',
-          capaianKompetensi: 'Perlu bimbingan dan pendampingan lebih lanjut pada penguasaan konsep dasar.'
+      (['1 (Ganjil)', '2 (Genap)'] as const).forEach((sem) => {
+        const semPrefix = sem === '2 (Genap)' ? 'sem2' : 'sem1';
+        types.forEach((type) => {
+          grades.push({
+            id: `grd-${semPrefix}-${student.id}-${subject.id}-${type}`,
+            siswaId: student.id,
+            mapelId: subject.id,
+            jenis: type,
+            nilai: 0,
+            semester: sem,
+            capaianKompetensi: 'Perlu bimbingan dan pendampingan lebih lanjut pada penguasaan konsep dasar.'
+          });
         });
       });
     });

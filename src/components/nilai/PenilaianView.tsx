@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AssessmentType, Subject, TujuanPembelajaran, AgamaType, normalizeSemester } from '../../types';
 import {
@@ -59,6 +59,7 @@ export const PenilaianView: React.FC = () => {
     deleteTP,
     extracurriculars,
     schoolInfo,
+    updateSchoolInfo,
     currentUser,
     setCurrentTab,
     addToast,
@@ -74,7 +75,21 @@ export const PenilaianView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'input_nilai' | 'ekstrakurikuler' | 'kelola_mapel_tp'>('input_nilai');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(safeSubjects[0]?.id || 'mapel-05');
   const [searchQuery, setSearchQuery] = useState('');
-  const [semesterFilter, setSemesterFilter] = useState<'Semua' | '1 (Ganjil)' | '2 (Genap)'>('Semua');
+  const [semesterFilter, setSemesterFilter] = useState<'1 (Ganjil)' | '2 (Genap)'>(
+    normalizeSemester(schoolInfo.semester)
+  );
+
+  // Sinkronisasi otomatis jika semester diubah dari tempat lain
+  useEffect(() => {
+    setSemesterFilter(normalizeSemester(schoolInfo.semester));
+  }, [schoolInfo.semester]);
+
+  const activeSemester = normalizeSemester(semesterFilter || schoolInfo.semester);
+
+  const handleSemesterChange = (newSem: '1 (Ganjil)' | '2 (Genap)') => {
+    setSemesterFilter(newSem);
+    updateSchoolInfo({ semester: newSem });
+  };
   const [isPrintLegerOpen, setIsPrintLegerOpen] = useState(false);
   const [isTPInfoExpanded, setIsTPInfoExpanded] = useState(true);
   const [isResetAllModalOpen, setIsResetAllModalOpen] = useState(false);
@@ -120,33 +135,37 @@ export const PenilaianView: React.FC = () => {
     return counts;
   }, [safeStudents]);
 
-  // Semester aktif yang digunakan untuk lookup dan penyimpanan nilai
-  const activeSemester = useMemo(() => {
-    if (semesterFilter !== 'Semua') return normalizeSemester(semesterFilter);
-    return normalizeSemester(schoolInfo.semester);
-  }, [semesterFilter, schoolInfo.semester]);
-
-  // Dynamically filtered active TPs for current subject according to semester filter & religion filter
+  // Dynamically filtered active TPs for current subject strictly according to active semester & religion
   const currentSubjectTPs = useMemo(() => {
+    const isSemGanjil = activeSemester === '1 (Ganjil)';
+
     return safeTPs.filter(tp => {
+      // Must match current subject
       if (tp.mapelId !== currentSubject?.id) return false;
-      if (semesterFilter !== 'Semua') {
-        const isSemGanjil = semesterFilter.includes('1') || semesterFilter.toLowerCase().includes('ganjil');
-        const tpGanjil = tp.semester.includes('1') || tp.semester.toLowerCase().includes('ganjil');
-        if (tp.semester !== 'Semua' && isSemGanjil !== tpGanjil) return false;
-      } else {
-        // Jika filter 'Semua', tampilkan TP yang sesuai dengan semester aktif sekolah
-        const isSemGanjil = activeSemester === '1 (Ganjil)';
-        const tpGanjil = tp.semester.includes('1') || tp.semester.toLowerCase().includes('ganjil');
-        if (tp.semester !== 'Semua' && isSemGanjil !== tpGanjil) return false;
+
+      // Semester filtering: strictly match active semester
+      const tpSemester = tp.semester || '1 (Ganjil)';
+      const tpIsGanjil = tpSemester.includes('1') || tpSemester.toLowerCase().includes('ganjil');
+      const tpIsGenap = tpSemester.includes('2') || tpSemester.toLowerCase().includes('genap');
+
+      if (isSemGanjil && !tpIsGanjil && tpIsGenap) return false;
+      if (!isSemGanjil && !tpIsGenap && tpIsGanjil) return false;
+
+      // Religion filtering for PAI
+      if (isAgama) {
+        if (filterAgama !== 'Semua') {
+          // If specific religion is selected, only show that religion's TPs
+          if (tp.agama && tp.agama !== filterAgama) return false;
+          if (!tp.agama && filterAgama !== 'Islam') return false;
+        } else {
+          // If 'Semua' is selected, show standard class religion (Islam) so we don't display 24 columns!
+          if (tp.agama && tp.agama !== 'Islam' && tp.agama !== 'Semua') return false;
+        }
       }
-      if (isAgama && filterAgama !== 'Semua') {
-        if (tp.agama && tp.agama !== filterAgama) return false;
-        if (!tp.agama && filterAgama !== 'Islam') return false;
-      }
+
       return true;
     });
-  }, [safeTPs, currentSubject?.id, semesterFilter, activeSemester, isAgama, filterAgama]);
+  }, [safeTPs, currentSubject?.id, activeSemester, isAgama, filterAgama]);
 
   // Helper to get grade record for specific student, mapel, and assessment/TP index terisolasi per semester (Standar 0)
   const getGradeValue = (siswaId: string, mapelId: string, assessmentKey: string, defaultVal = 0): number => {
